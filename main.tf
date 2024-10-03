@@ -60,7 +60,7 @@ resource "null_resource" "repo_deployment_tags_policy" {
   triggers = {
     repo_name = each.value.repo_name
     env_name  = each.value.env_name
-    org       = var.github_owner
+    org       = "amalgam-rx"
     tags      = join(" ", each.value.deploy_tags)
   }
 

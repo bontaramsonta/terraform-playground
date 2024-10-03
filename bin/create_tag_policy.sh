@@ -17,7 +17,7 @@ shift 3
 # Remaining arguments are treated as tags
 TAGS=("$@")
 
-echo "Varcheck: Environment '$ENV_NAME' in repository '$REPO_NAME' has been configured with tag patterns.";
+echo "Varcheck: Environment '$ENV_NAME' in repository '$REPO_NAME' will be configured with tag patterns.";
 for TAG in ${TAGS[@]}; do
   # Create or update the environment with the tag pattern
   echo "Tag: $TAG";
