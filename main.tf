@@ -1,79 +1,92 @@
-provider "github" {
-  token = var.github_token
-  owner = var.github_owner
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.76"
+    }
+  }
+  required_version = ">= 1.2.0"
 }
 
-locals {
-  # to flatten the repo_list map structure to generate repo - env
-  repo_env_flatten = flatten([
-    for repo_name, envs in var.repo_list : [
-      for env_name, team in envs.env_details_map :
-      {
-        repo_name = envs.repo_name
-        env_name  = env_name
-      }
-    ]
-    ]
-  )
+provider "aws" {
+  region = "us-east-1" // N. Virginia
 }
 
-resource "github_repository_environment" "repo_environment" {
-  for_each = {
-    for RepoEnvDetails in local.repo_env_flatten : "${RepoEnvDetails.repo_name}.${RepoEnvDetails.env_name}" => RepoEnvDetails
-  }
-  environment       = each.value.env_name
-  repository        = each.value.repo_name
-  can_admins_bypass = false
-  deployment_branch_policy {
-    protected_branches     = false
-    custom_branch_policies = true
+data "aws_vpc" "default" {
+  default = true
+}
+
+output "default_vpc_id" {
+  value = data.aws_vpc.default.id
+}
+
+
+# Get a subnet in the default VPC (in us-east-1a)
+data "aws_subnet" "default" {
+  vpc_id            = data.aws_vpc.default.id
+  availability_zone = "us-east-1a"
+}
+
+data "aws_key_pair" "generated_key" {
+  key_name = "sample-instance-key"
+}
+
+data "aws_ami" "amazon_linux" {
+  most_recent = true
+  owners      = ["amazon"] # Owned by Amazon
+
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm-*-arm64-gp2"] # Pattern for Amazon Linux 2 AMIs
   }
 }
 
-locals {
-  # to flatten the repo_list map structure to generate repo - env - tag mapping
-  repo_env_tags_flatten = flatten([
-    for repo_name, envs in var.repo_list : [
-      for env_name, env_details in envs.env_details_map :
-      {
-        repo_name   = envs.repo_name
-        env_name    = env_name
-        deploy_tags = env_details.deployment_tags
-      }
-    ]
-    ]
-  )
+output "ami" {
+  description = "amazon linux"
+  value       = data.aws_ami.amazon_linux.id
 }
 
-resource "terraform_data" "repo_deployment_tags_updater" {
-  for_each = {
-    for RepoEnvTagsDetails in local.repo_env_tags_flatten : "${RepoEnvTagsDetails.repo_name}.${RepoEnvTagsDetails.env_name}" => RepoEnvTagsDetails
-  }
-  input = each.value.deploy_tags
+resource "aws_security_group" "security-group-for-ssh" {
+  name        = "security-group-for-ssh"
+  vpc_id      = data.aws_vpc.default.id
+  description = "Allow SSH traffic for all"
 }
 
-resource "null_resource" "repo_deployment_tags_policy" {
-  for_each = {
-    for RepoEnvTagsDetails in local.repo_env_tags_flatten : "${RepoEnvTagsDetails.repo_name}.${RepoEnvTagsDetails.env_name}" => RepoEnvTagsDetails
-  }
+resource "aws_vpc_security_group_ingress_rule" "ingress-security-group-for-ssh" {
+  security_group_id = aws_security_group.security-group-for-ssh.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 22
+  ip_protocol       = "tcp"
+  to_port           = 22
+}
 
-  triggers = {
-    repo_name = each.value.repo_name
-    env_name  = each.value.env_name
-    org       = "amalgam-rx"
-    tags      = join(" ", each.value.deploy_tags)
-  }
+resource "aws_vpc_security_group_egress_rule" "egress-security-group-for-ssh" {
+  security_group_id = aws_security_group.security-group-for-ssh.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = -1
+}
 
-  provisioner "local-exec" {
-    command = "./bin/create_tag_policy.sh ${self.triggers.org} ${self.triggers.repo_name} ${self.triggers.env_name} ${self.triggers.tags}"
+resource "aws_instance" "sample_instance" {
+  ami                         = data.aws_ami.amazon_linux.id
+  instance_type               = "t4g.micro"
+  subnet_id                   = data.aws_subnet.default.id
+  vpc_security_group_ids      = [aws_security_group.security-group-for-ssh.id]
+  associate_public_ip_address = true
+  key_name                    = data.aws_key_pair.generated_key.key_name
+  root_block_device {
+    volume_size           = 8
+    volume_type           = "gp3"
+    delete_on_termination = true
   }
-  provisioner "local-exec" {
-    when    = destroy
-    command = "./bin/delete_tag_policy.sh ${self.triggers.org} ${self.triggers.repo_name} ${self.triggers.env_name}"
+  tags = {
+    Name = "sample-instance"
   }
+}
 
-  depends_on = [github_repository_environment.repo_environment]
-  lifecycle {
-    replace_triggered_by = [terraform_data.repo_deployment_tags_updater]
-  }
+output "instance_public_ip" {
+  value = aws_instance.sample_instance.public_ip
+}
+
+output "ssh_command" {
+  value = "ssh -i private_key.pem ec2-user@${aws_instance.sample_instance.public_ip}"
 }
