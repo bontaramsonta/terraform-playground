@@ -2,3 +2,7 @@
 terraform.tfstate*
 .terraform*
 *.pem
+node_modules
+logs
+*.zip
+.env

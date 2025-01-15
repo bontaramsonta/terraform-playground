@@ -2,91 +2,121 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.76"
+      version = "~> 5.0"
     }
   }
-  required_version = ">= 1.2.0"
 }
 
+# Configure the AWS Provider
 provider "aws" {
-  region = "us-east-1" // N. Virginia
+  region = "ap-south-1"
 }
 
-data "aws_vpc" "default" {
-  default = true
+resource "aws_iam_role" "lambda_exec_role" {
+  name = "lambda_exec_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
+  })
 }
 
-output "default_vpc_id" {
-  value = data.aws_vpc.default.id
+resource "aws_iam_role_policy_attachment" "lambda_logs" {
+  role       = aws_iam_role.lambda_exec_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-
-# Get a subnet in the default VPC (in us-east-1a)
-data "aws_subnet" "default" {
-  vpc_id            = data.aws_vpc.default.id
-  availability_zone = "us-east-1a"
+# Use the archive_file data source to zip the Lambda code
+data "archive_file" "lambda_zip" {
+  type        = "zip"
+  source_file = "${path.module}/index.js"
+  output_path = "${path.module}/function.zip"
 }
 
-data "aws_key_pair" "generated_key" {
-  key_name = "sample-instance-key"
+resource "aws_lambda_function" "my_lambda" {
+  filename         = data.archive_file.lambda_zip.output_path
+  function_name    = "MyLambdaFunction"
+  role             = aws_iam_role.lambda_exec_role.arn
+  handler          = "index.handler"
+  runtime          = "nodejs20.x"
+  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 }
 
-data "aws_ami" "amazon_linux" {
-  most_recent = true
-  owners      = ["amazon"] # Owned by Amazon
-
-  filter {
-    name   = "name"
-    values = ["amzn2-ami-hvm-*-arm64-gp2"] # Pattern for Amazon Linux 2 AMIs
-  }
+# Enable Function URL for the Lambda
+resource "aws_lambda_function_url" "my_lambda_url" {
+  function_name      = aws_lambda_function.my_lambda.function_name
+  authorization_type = "NONE" # Defines access control; "NONE" indicates no auth
 }
 
-output "ami" {
-  description = "amazon linux"
-  value       = data.aws_ami.amazon_linux.id
+output "lambda_function_url" {
+  value = aws_lambda_function_url.my_lambda_url.function_url
 }
 
-resource "aws_security_group" "security-group-for-ssh" {
-  name        = "security-group-for-ssh"
-  vpc_id      = data.aws_vpc.default.id
-  description = "Allow SSH traffic for all"
+resource "aws_cloudwatch_log_group" "my_log_group" {
+  name              = "/aws/lambda/MyLambdaFunction"
+  retention_in_days = 7
 }
 
-resource "aws_vpc_security_group_ingress_rule" "ingress-security-group-for-ssh" {
-  security_group_id = aws_security_group.security-group-for-ssh.id
-  cidr_ipv4         = "0.0.0.0/0"
-  from_port         = 22
-  ip_protocol       = "tcp"
-  to_port           = 22
+# --------------------------------------------------
+# Data Protection
+
+resource "aws_cloudwatch_log_group" "pii_detections" {
+  name              = "pii-detections"
+  retention_in_days = 0
 }
 
-resource "aws_vpc_security_group_egress_rule" "egress-security-group-for-ssh" {
-  security_group_id = aws_security_group.security-group-for-ssh.id
-  cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = -1
+locals {
+  DataIdentifier = [
+    "arn:aws:dataprotection::aws:data-identifier/Name",
+    "arn:aws:dataprotection::aws:data-identifier/CreditCardExpiration",
+    "arn:aws:dataprotection::aws:data-identifier/CreditCardNumber",
+    "arn:aws:dataprotection::aws:data-identifier/CreditCardSecurityCode",
+    "arn:aws:dataprotection::aws:data-identifier/Address",
+    "AmalgamCompanyName"
+  ]
 }
 
-resource "aws_instance" "sample_instance" {
-  ami                         = data.aws_ami.amazon_linux.id
-  instance_type               = "t4g.micro"
-  subnet_id                   = data.aws_subnet.default.id
-  vpc_security_group_ids      = [aws_security_group.security-group-for-ssh.id]
-  associate_public_ip_address = true
-  key_name                    = data.aws_key_pair.generated_key.key_name
-  root_block_device {
-    volume_size           = 8
-    volume_type           = "gp3"
-    delete_on_termination = true
-  }
-  tags = {
-    Name = "sample-instance"
-  }
-}
+resource "aws_cloudwatch_log_data_protection_policy" "my_log_group_protection" {
+  log_group_name = aws_cloudwatch_log_group.my_log_group.name
 
-output "instance_public_ip" {
-  value = aws_instance.sample_instance.public_ip
-}
-
-output "ssh_command" {
-  value = "ssh -i private_key.pem ec2-user@${aws_instance.sample_instance.public_ip}"
+  policy_document = jsonencode({
+    Name    = "MyLogGroupDataProtection"
+    Version = "2021-06-01"
+    Configuration = {
+      CustomDataIdentifier = [
+        {
+          Name  = "AmalgamCompanyName"
+          Regex = "amalgam"
+        }
+      ]
+    }
+    Statement = [
+      {
+        Sid            = "For_Audit"
+        DataIdentifier = local.DataIdentifier
+        Operation = {
+          Audit = {
+            FindingsDestination = {
+              CloudWatchLogs = {
+                LogGroup = aws_cloudwatch_log_group.pii_detections.name
+              }
+            }
+          }
+        }
+      },
+      {
+        Sid            = "For_Redact"
+        DataIdentifier = local.DataIdentifier
+        Operation = {
+          Deidentify = {
+            MaskConfig = {} #? no ref
+          }
+        }
+      }
+    ]
+  })
 }
