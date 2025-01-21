@@ -25,11 +25,6 @@ locals {
     "S3_DATA_EVENTS",
     "RUNTIME_MONITORING"
   ]
-  enabled_features_for_runtime_monitoring = {
-    EKS_ADDON_MANAGEMENT         = "DISABLED"
-    ECS_FARGATE_AGENT_MANAGEMENT = "ENABLED"
-    EC2_AGENT_MANAGEMENT         = "DISABLED"
-  }
 }
 
 resource "aws_guardduty_detector_feature" "guardduty_detector_feature" {
@@ -39,18 +34,26 @@ resource "aws_guardduty_detector_feature" "guardduty_detector_feature" {
   status      = "ENABLED"
 
   dynamic "additional_configuration" {
-    for_each = local.guardduty_detector_features[count.index] == "RUNTIME_MONITORING" ? local.enabled_features_for_runtime_monitoring : {}
+    for_each = local.guardduty_detector_features[count.index] == "RUNTIME_MONITORING" ? [1] : []
     content {
-      name   = additional_configuration.key
-      status = additional_configuration.value
+      name   = "EKS_ADDON_MANAGEMENT"
+      status = "DISABLED"
     }
   }
 
-  lifecycle {
-    ignore_changes = [
-      additional_configuration[0].name,
-      additional_configuration[1].name,
-      additional_configuration[2].name
-    ]
+  dynamic "additional_configuration" {
+    for_each = local.guardduty_detector_features[count.index] == "RUNTIME_MONITORING" ? [1] : []
+    content {
+      name   = "ECS_FARGATE_AGENT_MANAGEMENT"
+      status = "ENABLED"
+    }
+  }
+
+  dynamic "additional_configuration" {
+    for_each = local.guardduty_detector_features[count.index] == "RUNTIME_MONITORING" ? [1] : []
+    content {
+      name   = "EC2_AGENT_MANAGEMENT"
+      status = "DISABLED"
+    }
   }
 }
