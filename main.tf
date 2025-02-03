@@ -139,32 +139,6 @@ resource "aws_s3_bucket_policy" "builds-bucket-policy" {
   })
 }
 
-# bucket policy allowing access to cloudfront distribution
-# data "aws_iam_policy_document" "allow_access_s3_oac_access" {
-#   statement {
-#     effect = "Allow"
-
-#     principals {
-#       type        = "Service"
-#       identifiers = ["cloudfront.amazonaws.com"]
-#     }
-
-#     actions = [
-#       "s3:GetObject",
-#     ]
-
-#     resources = [
-#       "${aws_s3_bucket.builds-bucket.arn}/*"
-#     ]
-
-#     condition {
-#       test     = "StringEquals"
-#       variable = "AWS:SourceArn"
-#       values   = [aws_cloudfront_distribution.cf-dist.arn]
-#     }
-#   }
-# }
-
 output "cf-alias" {
   value = aws_cloudfront_distribution.cf-dist.domain_name
 }
