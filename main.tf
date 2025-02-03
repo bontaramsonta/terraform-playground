@@ -12,11 +12,14 @@ provider "aws" {
   region = "ap-south-1"
 }
 
-locals {
-  bucket-name = "<origin_bucket_name>"
-  allowed_ips = [
-    "<example_ip>"
-  ]
+variable "bucket_name" {
+  description = "The name of the S3 bucket"
+  type        = string
+}
+
+variable "allowed_ips" {
+  description = "A list of IPs allowed access"
+  type        = list(string)
 }
 
 # cf stuffs
@@ -34,7 +37,7 @@ resource "aws_cloudfront_function" "test" {
   runtime = "cloudfront-js-2.0"
   comment = "this function allows only certain ips"
   publish = true
-  code    = templatefile("${path.module}/function.js", { allowed_ips = join(",", local.allowed_ips) })
+  code    = templatefile("${path.module}/function.js", { allowed_ips = join(",", var.allowed_ips) })
 }
 
 output "function_code" {
@@ -94,7 +97,7 @@ resource "aws_cloudfront_distribution" "cf-dist" {
 # bucket stuff
 
 resource "aws_s3_bucket" "builds-bucket" {
-  bucket = local.bucket-name
+  bucket = var.bucket_name
 }
 
 resource "aws_s3_object" "html-file" {
@@ -116,34 +119,51 @@ resource "aws_s3_bucket_public_access_block" "builds-bucket-public_access" {
 
 resource "aws_s3_bucket_policy" "builds-bucket-policy" {
   bucket = aws_s3_bucket.builds-bucket.id
-  policy = data.aws_iam_policy_document.allow_access_s3_oac_access.json
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudfront.amazonaws.com"
+        }
+        Action   = ["s3:GetObject"]
+        Resource = "${aws_s3_bucket.builds-bucket.arn}/*"
+        Condition = {
+          StringEquals = {
+            "AWS:SourceArn" = "${aws_cloudfront_distribution.cf-dist.arn}"
+          }
+        }
+      }
+    ]
+  })
 }
 
 # bucket policy allowing access to cloudfront distribution
-data "aws_iam_policy_document" "allow_access_s3_oac_access" {
-  statement {
-    effect = "Allow"
+# data "aws_iam_policy_document" "allow_access_s3_oac_access" {
+#   statement {
+#     effect = "Allow"
 
-    principals {
-      type        = "Service"
-      identifiers = ["cloudfront.amazonaws.com"]
-    }
+#     principals {
+#       type        = "Service"
+#       identifiers = ["cloudfront.amazonaws.com"]
+#     }
 
-    actions = [
-      "s3:GetObject",
-    ]
+#     actions = [
+#       "s3:GetObject",
+#     ]
 
-    resources = [
-      "${aws_s3_bucket.builds-bucket.arn}/*"
-    ]
+#     resources = [
+#       "${aws_s3_bucket.builds-bucket.arn}/*"
+#     ]
 
-    condition {
-      test     = "StringEquals"
-      variable = "AWS:SourceArn"
-      values   = [aws_cloudfront_distribution.cf-dist.arn]
-    }
-  }
-}
+#     condition {
+#       test     = "StringEquals"
+#       variable = "AWS:SourceArn"
+#       values   = [aws_cloudfront_distribution.cf-dist.arn]
+#     }
+#   }
+# }
 
 output "cf-alias" {
   value = aws_cloudfront_distribution.cf-dist.domain_name
