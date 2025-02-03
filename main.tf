@@ -20,6 +20,7 @@ variable "bucket_name" {
 variable "allowed_ips" {
   description = "A list of IPs allowed access"
   type        = list(string)
+  default     = []
 }
 
 # cf stuffs
@@ -33,15 +34,16 @@ resource "aws_cloudfront_origin_access_control" "oac" {
 
 # ! ./function.js
 resource "aws_cloudfront_function" "test" {
+  count   = length(var.allowed_ips) != 0 ? 1 : 0
   name    = "ip-based-whitelisting"
   runtime = "cloudfront-js-2.0"
-  comment = "this function allows only certain ips"
+  comment = "this function allows only given ips"
   publish = true
   code    = templatefile("${path.module}/function.js", { allowed_ips = join(",", var.allowed_ips) })
 }
 
 output "function_code" {
-  value = aws_cloudfront_function.test.code
+  value = aws_cloudfront_function.test[0].code
 }
 
 resource "aws_cloudfront_distribution" "cf-dist" {
@@ -87,9 +89,12 @@ resource "aws_cloudfront_distribution" "cf-dist" {
       }
     }
 
-    function_association {
-      event_type   = "viewer-request"
-      function_arn = aws_cloudfront_function.test.arn
+    dynamic "function_association" {
+      for_each = length(var.allowed_ips) > 0 ? [1] : []
+      content {
+        event_type   = "viewer-request"
+        function_arn = aws_cloudfront_function.test.arn
+      }
     }
   }
 }
