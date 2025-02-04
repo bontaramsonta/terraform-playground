@@ -93,7 +93,7 @@ resource "aws_cloudfront_distribution" "cf-dist" {
       for_each = length(var.allowed_ips) > 0 ? [1] : []
       content {
         event_type   = "viewer-request"
-        function_arn = aws_cloudfront_function.test.arn
+        function_arn = aws_cloudfront_function.test[0].arn
       }
     }
   }
