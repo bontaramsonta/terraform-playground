@@ -1,6 +1,7 @@
 .terraform
 terraform.tfstate*
-.terraform*
+.terraform.lock.hcl
+.terraform-version
 *.pem
 node_modules
 logs

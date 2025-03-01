@@ -1,33 +1,29 @@
-# IP-Based request filtering for builds and api docs pages
+# SSM Features
 
-serving location:
+## SSM Session Manager
 
-- builds: cloudfront-s3
-- apiDocs: waf-alb-ecs
+what are the requirements/prerequisites of ssm session manager?
 
-## For builds
+### lets try a scenario.
 
-![image](./diagram.png)
+- create an instance using amz-linux-2 ami which includes ssm agent in default vpc/subnet
+- restrict access to port 22 in security group
+- lets try connecting to the instance using ssm-session-manager
 
-A Function will do the filtering
+#### will it work?
 
-### ways to do this-
+nope
 
-- lambda@edge
-- cloudfront functions
+*Getting Error*
+> SSM Agent is not online
+> The SSM Agent was unable to connect to a Systems Manager endpoint to register itself with the service.
 
-[diff b/w 'em](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/edge-functions-choosing.html)
+*Possible Issues*
+- maybe because port 22 is not open
+- maybe because ssm agent is not running
+- maybe instance is not authorized to connect to ssm.
 
-cf fns limits
-
-- max mem 2mb - don't know about the mem usage in cloudfront2.0 runtime
-- max (code + deps size) 10kb... (are the aws sdk deps included in this?)
-- no external requests... no fetch, no fs, no os
-- fn log where? and how?
-
-## For api docs
-
-Using WAF rules
-
-- A waf rule on /api/apiDocs to deny all ips
-- A WAF rule on /api/apiDocs to allow certain ips
+Now, I opened port 22. But, didn't help.
+But after opening port 22, I am able to connect to instance using ec2-instance-connect
+I ran `sudo systemctl status amazon-ssm-agent` and it was running but error out with message
+<something related to insufficient permissions on instance profile to connect to ssm>

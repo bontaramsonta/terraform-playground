@@ -10,140 +10,144 @@ terraform {
 # Configure the AWS Provider
 provider "aws" {
   region = "ap-south-1"
-}
-
-variable "bucket_name" {
-  description = "The name of the S3 bucket"
-  type        = string
-}
-
-variable "allowed_ips" {
-  description = "A list of IPs allowed access"
-  type        = list(string)
-  default     = []
-}
-
-# cf stuffs
-resource "aws_cloudfront_origin_access_control" "oac" {
-  name                              = "s3-oac"
-  description                       = "OAC for S3 bucket"
-  origin_access_control_origin_type = "s3"
-  signing_behavior                  = "always"
-  signing_protocol                  = "sigv4"
-}
-
-# ! ./function.js
-resource "aws_cloudfront_function" "test" {
-  count   = length(var.allowed_ips) != 0 ? 1 : 0
-  name    = "ip-based-whitelisting"
-  runtime = "cloudfront-js-2.0"
-  comment = "this function allows only given ips"
-  publish = true
-  code    = templatefile("${path.module}/function.js", { allowed_ips = join(",", var.allowed_ips) })
-}
-
-output "function_code" {
-  value = aws_cloudfront_function.test[0].code
-}
-
-resource "aws_cloudfront_distribution" "cf-dist" {
-  enabled             = true
-  default_root_object = "index.html"
-  origin {
-    domain_name              = aws_s3_bucket.builds-bucket.bucket_regional_domain_name
-    origin_id                = aws_s3_bucket.builds-bucket.id
-    origin_access_control_id = aws_cloudfront_origin_access_control.oac.id
-  }
-  default_cache_behavior {
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = aws_s3_bucket.builds-bucket.id
-    viewer_protocol_policy = "allow-all"
-    forwarded_values {
-      query_string = false
-      cookies {
-        forward = "none"
-      }
-    }
-  }
-  viewer_certificate {
-    cloudfront_default_certificate = true
-  }
-  restrictions {
-    geo_restriction {
-      restriction_type = "whitelist"
-      locations        = ["IN"]
-    }
-  }
-  ordered_cache_behavior {
-    path_pattern           = "/*"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = aws_s3_bucket.builds-bucket.id
-    viewer_protocol_policy = "allow-all"
-
-    forwarded_values {
-      query_string = false
-      cookies {
-        forward = "none"
-      }
-    }
-
-    dynamic "function_association" {
-      for_each = length(var.allowed_ips) > 0 ? [1] : []
-      content {
-        event_type   = "viewer-request"
-        function_arn = aws_cloudfront_function.test[0].arn
-      }
+  default_tags {
+    tags = {
+      "managed_by" = "terraform",
+      "region"     = "ap-south-1",
+      "project"    = "ssm-example"
     }
   }
 }
 
-# bucket stuff
-
-resource "aws_s3_bucket" "builds-bucket" {
-  bucket = var.bucket_name
+# Get the default VPC
+data "aws_vpc" "default" {
+  default = true
 }
 
-resource "aws_s3_object" "html-file" {
-  bucket       = aws_s3_bucket.builds-bucket.bucket
-  key          = "index.html"
-  source       = "./index.html"
-  content_type = "text/html"
-  etag         = filemd5("./index.html")
+# Get the default subnets in the default VPC (across all AZs)
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
 }
 
-resource "aws_s3_bucket_public_access_block" "builds-bucket-public_access" {
-  bucket = aws_s3_bucket.builds-bucket.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
+#! Debug
+output "default_vpc_id" {
+  value       = data.aws_vpc.default.id
+  description = "default vpc id"
 }
 
-resource "aws_s3_bucket_policy" "builds-bucket-policy" {
-  bucket = aws_s3_bucket.builds-bucket.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Service = "cloudfront.amazonaws.com"
-        }
-        Action   = ["s3:GetObject"]
-        Resource = "${aws_s3_bucket.builds-bucket.arn}/*"
-        Condition = {
-          StringEquals = {
-            "AWS:SourceArn" = "${aws_cloudfront_distribution.cf-dist.arn}"
-          }
-        }
-      }
-    ]
-  })
+output "vpc_subnet_ids" {
+  value       = data.aws_subnets.default.ids
+  description = "default vpc subnet ids"
+}
+#!
+
+# Get the latest Amazon Linux 2 AMI
+data "aws_ami" "amazon_linux_2" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-kernel-*"]
+  }
+
+  filter {
+    name   = "root-device-type"
+    values = ["ebs"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["arm64"]
+  }
+
+  filter {
+    name   = "is-public"
+    values = ["true"]
+  }
+
+  filter {
+    name   = "block-device-mapping.volume-type"
+    values = ["gp2"]
+  }
 }
 
-output "cf-alias" {
-  value = aws_cloudfront_distribution.cf-dist.domain_name
+#! Debug
+output "ami-id" {
+  value       = data.aws_ami.amazon_linux_2.id
+  description = "ami id of latest amazon linux 2 in ap-south-1"
+}
+
+output "ami-vol_type" {
+  value       = one(data.aws_ami.amazon_linux_2.block_device_mappings).ebs.volume_type
+  description = "ami vol type"
+}
+#!
+
+resource "aws_security_group" "ssm_example_sg" {
+  name   = "ssm-example-sg"
+  vpc_id = data.aws_vpc.default.id
+
+  ingress {
+    description = "SSH from anywhere"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTP from anywhere"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTPS from anywhere"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_instance" "ssm_example_instance" {
+  ami           = data.aws_ami.amazon_linux_2.id
+  instance_type = "t4g.micro"
+  # For IMDv2
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
+
+  # network config
+  subnet_id                   = data.aws_subnets.default.ids[0]
+  vpc_security_group_ids      = [aws_security_group.ssm_example_sg.id]
+  associate_public_ip_address = true
+
+  # startup config
+  user_data                   = file("${path.module}/user_data.sh")
+  user_data_replace_on_change = true
+}
+
+output "ssm_instance_public_ip" {
+  value       = aws_instance.ssm_example_instance.public_ip
+  description = "public ip of ssm example instance"
 }
