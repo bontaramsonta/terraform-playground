@@ -14,33 +14,32 @@ provider "aws" {
     tags = {
       "managed_by" = "terraform",
       "region"     = "ap-south-1",
-      "project"    = "ssm-example"
+      "project"    = "ec2-instance-connect"
     }
   }
 }
 
-# Get the default VPC
-data "aws_vpc" "default" {
-  default = true
+# Create a VPC
+resource "aws_vpc" "my_vpc" {
+  cidr_block           = "10.1.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
 }
 
-# Get the default subnets in the default VPC (across all AZs)
-data "aws_subnets" "default" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
-  }
+# Create a private subnet
+resource "aws_subnet" "my_private_subnet" {
+  vpc_id                  = aws_vpc.my_vpc.id
+  cidr_block              = "10.1.1.0/24"
+  availability_zone       = "ap-south-1a" # Update to your preferred AZ
+  map_public_ip_on_launch = false
 }
-
 #! Debug
 output "default_vpc_id" {
-  value       = data.aws_vpc.default.id
-  description = "default vpc id"
+  value = aws_vpc.my_vpc.id
 }
 
-output "vpc_subnet_ids" {
-  value       = data.aws_subnets.default.ids
-  description = "default vpc subnet ids"
+output "vpc_subnet_id" {
+  value = aws_subnet.my_private_subnet.id
 }
 #!
 
@@ -94,37 +93,14 @@ output "ami-vol_type" {
 
 resource "aws_security_group" "ssm_example_sg" {
   name   = "ssm-example-sg"
-  vpc_id = data.aws_vpc.default.id
+  vpc_id = aws_vpc.my_vpc.id
 
   ingress {
-    description = "SSH from anywhere"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "HTTP from anywhere"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "HTTPS from anywhere"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    description     = "SSH from connect endpoint"
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_security_group.endpoint_sg.id]
   }
 }
 
@@ -138,16 +114,24 @@ resource "aws_instance" "ssm_example_instance" {
   }
 
   # network config
-  subnet_id                   = data.aws_subnets.default.ids[0]
-  vpc_security_group_ids      = [aws_security_group.ssm_example_sg.id]
-  associate_public_ip_address = true
-
-  # startup config
-  user_data                   = file("${path.module}/user_data.sh")
-  user_data_replace_on_change = true
+  subnet_id              = aws_subnet.my_private_subnet.id
+  vpc_security_group_ids = [aws_security_group.ssm_example_sg.id]
 }
 
-output "ssm_instance_public_ip" {
-  value       = aws_instance.ssm_example_instance.public_ip
-  description = "public ip of ssm example instance"
+resource "aws_security_group" "endpoint_sg" {
+  name   = "endpoint-sg"
+  vpc_id = aws_vpc.my_vpc.id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_ec2_instance_connect_endpoint" "my_endpoint" {
+  preserve_client_ip = true
+  subnet_id          = aws_subnet.my_private_subnet.id
+  security_group_ids = [aws_security_group.endpoint_sg.id]
 }
