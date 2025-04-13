@@ -171,24 +171,27 @@ resource "aws_instance" "ssm_example_instance" {
 }
 
 resource "aws_vpc_endpoint" "ec2messages" {
-  vpc_id            = aws_vpc.my_vpc.id
-  subnet_ids        = [aws_subnet.my_private_subnet.id]
-  service_name      = "com.amazonaws.${var.region}.ec2messages"
-  vpc_endpoint_type = "Interface"
+  vpc_id              = aws_vpc.my_vpc.id
+  subnet_ids          = [aws_subnet.my_private_subnet.id]
+  service_name        = "com.amazonaws.${var.region}.ec2messages"
+  private_dns_enabled = true
+  vpc_endpoint_type   = "Interface"
 }
 
 resource "aws_vpc_endpoint" "ssmmessages" {
-  vpc_id            = aws_vpc.my_vpc.id
-  subnet_ids        = [aws_subnet.my_private_subnet.id]
-  service_name      = "com.amazonaws.${var.region}.ssmmessages"
-  vpc_endpoint_type = "Interface"
+  vpc_id              = aws_vpc.my_vpc.id
+  subnet_ids          = [aws_subnet.my_private_subnet.id]
+  service_name        = "com.amazonaws.${var.region}.ssmmessages"
+  private_dns_enabled = true
+  vpc_endpoint_type   = "Interface"
 }
 
 resource "aws_vpc_endpoint" "ssm" {
-  vpc_id            = aws_vpc.my_vpc.id
-  subnet_ids        = [aws_subnet.my_private_subnet.id]
-  service_name      = "com.amazonaws.${var.region}.ssm"
-  vpc_endpoint_type = "Interface"
+  vpc_id              = aws_vpc.my_vpc.id
+  subnet_ids          = [aws_subnet.my_private_subnet.id]
+  service_name        = "com.amazonaws.${var.region}.ssm"
+  private_dns_enabled = true
+  vpc_endpoint_type   = "Interface"
 }
 
 resource "aws_security_group" "ssm_example_sg" {
@@ -205,12 +208,11 @@ resource "aws_security_group" "ssm_example_sg" {
   }
 
   egress {
-    description      = "Outbound HTTPS traffic to SSM"
-    from_port        = 443
-    to_port          = 443
-    protocol         = "tcp"
-    cidr_blocks      = ["0.0.0.0/0"]
-    ipv6_cidr_blocks = ["::/0"]
+    description = "Outbound HTTPS traffic to SSM"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
