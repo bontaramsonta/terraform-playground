@@ -2,7 +2,6 @@ variable "region" {
   description = "The AWS region where resources will be created"
   default     = "us-east-1"
 }
-
 terraform {
   required_providers {
     aws = {
@@ -16,6 +15,7 @@ terraform {
     region       = "ap-south-1"
     use_lockfile = true
   }
+
 }
 
 # Configure the AWS Provider
@@ -25,25 +25,23 @@ provider "aws" {
     tags = {
       "managed_by" = "terraform",
       "region"     = var.region,
-      "project"    = "ssm-example-public"
+      "project"    = "ec2-instance-connect"
     }
   }
 }
 
-resource "aws_default_vpc" "default" {}
+# Create a VPC
+resource "aws_vpc" "my_vpc" {
+  cidr_block           = "10.1.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+}
 
-resource "aws_default_subnet" "default_subnet" {
+# Create a private subnet
+resource "aws_subnet" "my_private_subnet" {
+  vpc_id            = aws_vpc.my_vpc.id
+  cidr_block        = "10.1.1.0/24"
   availability_zone = "${var.region}a"
-}
-
-output "default_vpc_id" {
-  value       = aws_default_vpc.default.id
-  description = "The ID of the default VPC"
-}
-
-output "default_subnet_id" {
-  value       = aws_default_subnet.default_subnet.id
-  description = "The ID of the default subnet"
 }
 
 # Get the latest Amazon Linux 2 AMI
@@ -74,11 +72,6 @@ data "aws_ami" "amazon_linux_2" {
     name   = "block-device-mapping.volume-type"
     values = ["gp2"]
   }
-}
-
-output "ami-id" {
-  value       = data.aws_ami.amazon_linux_2.id
-  description = "ami id of latest amazon linux 2 in ap-south-1"
 }
 
 # IAM stuff
@@ -121,13 +114,60 @@ resource "aws_instance" "ssm_example_instance" {
   }
 
   # network config
-  subnet_id              = aws_default_subnet.default_subnet.id
+  subnet_id              = aws_subnet.my_private_subnet.id
   vpc_security_group_ids = [aws_security_group.ssm_example_sg.id]
+}
+
+resource "aws_security_group" "ssm_endpoint_sg" {
+  name   = "ssm-endpoint-sg"
+  vpc_id = aws_vpc.my_vpc.id
+
+  ingress {
+    description = "Allow HTTPS traffic from EC2 instances in the VPC"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [aws_vpc.my_vpc.cidr_block]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_vpc_endpoint" "ec2messages" {
+  vpc_id              = aws_vpc.my_vpc.id
+  subnet_ids          = [aws_subnet.my_private_subnet.id]
+  service_name        = "com.amazonaws.${var.region}.ec2messages"
+  private_dns_enabled = true
+  vpc_endpoint_type   = "Interface"
+  security_group_ids  = [aws_security_group.ssm_endpoint_sg.id]
+}
+
+resource "aws_vpc_endpoint" "ssmmessages" {
+  vpc_id              = aws_vpc.my_vpc.id
+  subnet_ids          = [aws_subnet.my_private_subnet.id]
+  service_name        = "com.amazonaws.${var.region}.ssmmessages"
+  private_dns_enabled = true
+  vpc_endpoint_type   = "Interface"
+  security_group_ids  = [aws_security_group.ssm_endpoint_sg.id]
+}
+
+resource "aws_vpc_endpoint" "ssm" {
+  vpc_id              = aws_vpc.my_vpc.id
+  subnet_ids          = [aws_subnet.my_private_subnet.id]
+  service_name        = "com.amazonaws.${var.region}.ssm"
+  private_dns_enabled = true
+  vpc_endpoint_type   = "Interface"
+  security_group_ids  = [aws_security_group.ssm_endpoint_sg.id]
 }
 
 resource "aws_security_group" "ssm_example_sg" {
   name   = "ssm-example-sg"
-  vpc_id = aws_default_vpc.default.id
+  vpc_id = aws_vpc.my_vpc.id
 
   ingress {
     description      = "Inbound SSH traffic from EC2 Instance Connect Endpoint"
@@ -144,4 +184,8 @@ resource "aws_security_group" "ssm_example_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+}
+
+resource "aws_ec2_instance_connect_endpoint" "my_endpoint" {
+  subnet_id = aws_subnet.my_private_subnet.id
 }
