@@ -15,7 +15,6 @@ terraform {
     region       = "ap-south-1"
     use_lockfile = true
   }
-
 }
 
 # Configure the AWS Provider
@@ -118,25 +117,6 @@ resource "aws_instance" "ssm_example_instance" {
   vpc_security_group_ids = [aws_security_group.ssm_example_sg.id]
 }
 
-resource "aws_security_group" "ssm_endpoint_sg" {
-  name   = "ssm-endpoint-sg"
-  vpc_id = aws_vpc.my_vpc.id
-
-  ingress {
-    description = "Allow HTTPS traffic from EC2 instances in the VPC"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = [aws_vpc.my_vpc.cidr_block]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
 
 resource "aws_vpc_endpoint" "ec2messages" {
   vpc_id              = aws_vpc.my_vpc.id
@@ -144,7 +124,6 @@ resource "aws_vpc_endpoint" "ec2messages" {
   service_name        = "com.amazonaws.${var.region}.ec2messages"
   private_dns_enabled = true
   vpc_endpoint_type   = "Interface"
-  security_group_ids  = [aws_security_group.ssm_endpoint_sg.id]
 }
 
 resource "aws_vpc_endpoint" "ssmmessages" {
@@ -153,7 +132,6 @@ resource "aws_vpc_endpoint" "ssmmessages" {
   service_name        = "com.amazonaws.${var.region}.ssmmessages"
   private_dns_enabled = true
   vpc_endpoint_type   = "Interface"
-  security_group_ids  = [aws_security_group.ssm_endpoint_sg.id]
 }
 
 resource "aws_vpc_endpoint" "ssm" {
@@ -162,7 +140,6 @@ resource "aws_vpc_endpoint" "ssm" {
   service_name        = "com.amazonaws.${var.region}.ssm"
   private_dns_enabled = true
   vpc_endpoint_type   = "Interface"
-  security_group_ids  = [aws_security_group.ssm_endpoint_sg.id]
 }
 
 resource "aws_security_group" "ssm_example_sg" {
