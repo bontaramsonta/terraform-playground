@@ -8,3 +8,8 @@ logs
 *.zip
 .env
 *.tfvars
+**/*.json
+
+# experiment fixtures are part of the record
+!experiments/**/*.json
+!experiments/**/*.tfvars

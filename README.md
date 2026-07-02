@@ -1,48 +1,31 @@
-# SSM Features
+# Terraform playground
 
-## SSM Session Manager
+One-off AWS (and GitHub) experiments, each self-contained under
+`experiments/` with its own state key (`terraform/play/<name>.tfstate` in the
+shared state bucket), so any experiment can be applied and destroyed
+independently:
 
-what are the requirements/prerequisites of ssm session manager?
+```sh
+cd experiments/<name>
+AWS_PROFILE=sourav terraform init
+AWS_PROFILE=sourav terraform apply
+```
 
-### lets try a scenario.
+Everything should be destroyed when not actively being poked at.
 
-- create an instance using amz-linux-2 ami which includes ssm agent in default vpc/subnet
-- restrict access to port 22 in security group
-- lets try connecting to the instance using ssm-session-manager
+## Experiments
 
-#### will it work?
+| # | Experiment | Notes |
+|---|---|---|
+| [01](experiments/01-tag-policy-check/) | GitHub deployment tag policy check | GitHub provider, not AWS |
+| [02](experiments/02-cloudwatch-data-protection/) | CloudWatch Logs data protection | PII redaction policy on a log group |
+| [03](experiments/03-guardduty-ecs-runtime-monitoring/) | GuardDuty ECS runtime monitoring | detector + feature flag POC |
+| [04](experiments/04-cloudfront-ip-blocking/) | CloudFront IP-based request blocking | CF function, has diagram |
+| [05](experiments/05-ssm-session-manager/) | SSM Session Manager in private subnets | interface-endpoint SG gotcha |
+| [06](experiments/06-tls-keygen-secrets-manager/) | TLS RSA keygen → Secrets Manager | trailing-newline gotcha |
+| [07](experiments/07-cloudfront-lambda-edge/) | CloudFront + Lambda@Edge | us-east-1 requirement |
+| [08](experiments/08-web-analytics-firehose/) | Web analytics ingestion | Firehose → Lambda → S3 + Cognito |
+| [09](experiments/09-ecs-fargate-spot/) | ECS Fargate on Spot | capacity providers, interruption handling |
 
-nope
-
-*Getting Error*
-> SSM Agent is not online
-> The SSM Agent was unable to connect to a Systems Manager endpoint to register itself with the service.
-
-*Possible Issues*
-- maybe because port 22 is not open
-- maybe because ssm agent is not running
-- maybe instance is not authorized to connect to ssm.
-
-Now, I opened port 22. But, didn't help.
-But after opening port 22, I am able to connect to instance using ec2-instance-connect
-I ran `sudo systemctl status amazon-ssm-agent` and it was running but error out with message
-<something related to insufficient permissions on instance profile to connect to ssm>
-
-- create ec2messages, ssm, ssmmessages interface endpoints with private dns enabled.
-
-# Ok, now lets do easy mode
-
-I am gonna create the setup in a public subnet this time with managed policy and lax security group.
-
-and it works. Great!. Looks like it most probably because of the interface endpoints.
-I missing something in the networking part.
-
-# Let's try again with the same scenario
-
-this time with managed policy and lax security group but private subnet/interface endpoints.
-
-# Solution
-
-Turns out, I was missing security group in the interface endpoints. My understanding was that the interface
-endpoints deployed with no specific security group uses the default security group which allows all traffic.
-But turns out, it only allows traffic from other resources using the same security group.🤯
+Older experiment iterations (the journey, not just the final state) remain in
+git history — `git log --oneline`.

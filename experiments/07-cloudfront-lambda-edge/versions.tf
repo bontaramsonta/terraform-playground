@@ -7,7 +7,7 @@ terraform {
   }
   backend "s3" {
     bucket       = "my-tf-state-3y5"
-    key          = "terraform/default-state"
+    key          = "terraform/play/07-cloudfront-lambda-edge.tfstate"
     region       = "ap-south-1"
     use_lockfile = true
   }

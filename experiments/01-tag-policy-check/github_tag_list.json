@@ -1,0 +1,17 @@
+{
+  "total_count": 2,
+  "branch_policies": [
+    {
+      "id": 21514786,
+      "node_id": "MDE2OkdhdGVCcmFuY2hQb2xpY3kyMTUxNDc4Ng==",
+      "name": "develop__DEV__*",
+      "type": "tag"
+    },
+    {
+      "id": 21514787,
+      "node_id": "MDE2OkdhdGVCcmFuY2hQb2xpY3kyMTUxNDc4Nw==",
+      "name": "develop_something_else__*",
+      "type": "tag"
+    }
+  ]
+}
