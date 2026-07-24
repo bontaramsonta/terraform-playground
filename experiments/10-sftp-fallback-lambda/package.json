@@ -1,0 +1,12 @@
+{
+  "name": "sftp-fallback-lambda-experiment",
+  "private": true,
+  "description": "Reproduces the avhana-etl SFTP fallback lambda host-key verification, driven by env vars the same way prod passes them.",
+  "scripts": {
+    "test": "node run.js"
+  },
+  "dependencies": {
+    "ssh2": "^1.17.0",
+    "ssh2-sftp-client": "^12.0.0"
+  }
+}
