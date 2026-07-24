@@ -26,6 +26,7 @@ Everything should be destroyed when not actively being poked at.
 | [07](experiments/07-cloudfront-lambda-edge/) | CloudFront + Lambda@Edge | us-east-1 requirement |
 | [08](experiments/08-web-analytics-firehose/) | Web analytics ingestion | Firehose → Lambda → S3 + Cognito |
 | [09](experiments/09-ecs-fargate-spot/) | ECS Fargate on Spot | capacity providers, interruption handling |
+| [10](experiments/10-sftp-fallback-lambda/) | SFTP fallback lambda host-key verification | multiple host keys via env var; `\n` vs comma; local Node, no AWS |
 
 Older experiment iterations (the journey, not just the final state) remain in
 git history — `git log --oneline`.
