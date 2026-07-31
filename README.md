@@ -26,6 +26,7 @@ Everything should be destroyed when not actively being poked at.
 | [07](experiments/07-cloudfront-lambda-edge/) | CloudFront + Lambda@Edge | us-east-1 requirement |
 | [08](experiments/08-web-analytics-firehose/) | Web analytics ingestion | Firehose → Lambda → S3 + Cognito |
 | [09](experiments/09-ecs-fargate-spot/) | ECS Fargate on Spot | capacity providers, interruption handling |
+| [12](experiments/12-google-workspace-identity-center/) | Google Workspace → IAM Identity Center | **handoff / not started** — why alopa uses per-account SAML vs IdC; build the IdC alternative in personal org |
 
 Older experiment iterations (the journey, not just the final state) remain in
 git history — `git log --oneline`.
