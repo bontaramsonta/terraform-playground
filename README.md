@@ -7,8 +7,8 @@ independently:
 
 ```sh
 cd experiments/<name>
-AWS_PROFILE=sourav terraform init
-AWS_PROFILE=sourav terraform apply
+terraform init
+terraform apply
 ```
 
 Everything should be destroyed when not actively being poked at.
@@ -27,6 +27,7 @@ Everything should be destroyed when not actively being poked at.
 | [08](experiments/08-web-analytics-firehose/) | Web analytics ingestion | Firehose → Lambda → S3 + Cognito |
 | [09](experiments/09-ecs-fargate-spot/) | ECS Fargate on Spot | capacity providers, interruption handling |
 | [12](experiments/12-google-workspace-identity-center/) | Google Workspace → IAM Identity Center | **handoff / not started** — why alopa uses per-account SAML vs IdC; build the IdC alternative in personal org |
+| [15](experiments/15-t3code-box/) | T3 Code box | t4g EC2, Tailscale + T3 Connect, **stays applied** |
 
 Older experiment iterations (the journey, not just the final state) remain in
 git history — `git log --oneline`.
